@@ -129,6 +129,13 @@ func (p Parser) Parse(spec string) (Schedule, error) {
 		return bits
 	}
 
+	// Check for 'L' in day of month field (last day of month)
+	lastDayOfMonth := false
+	if fields[3] == "L" {
+		lastDayOfMonth = true
+		fields[3] = "*" // Set to all days, we'll handle the logic separately
+	}
+
 	var (
 		second     = field(fields[0], seconds)
 		minute     = field(fields[1], minutes)
@@ -142,13 +149,14 @@ func (p Parser) Parse(spec string) (Schedule, error) {
 	}
 
 	return &SpecSchedule{
-		Second:   second,
-		Minute:   minute,
-		Hour:     hour,
-		Dom:      dayofmonth,
-		Month:    month,
-		Dow:      dayofweek,
-		Location: loc,
+		Second:         second,
+		Minute:         minute,
+		Hour:           hour,
+		Dom:            dayofmonth,
+		Month:          month,
+		Dow:            dayofweek,
+		Location:       loc,
+		LastDayOfMonth: lastDayOfMonth,
 	}, nil
 }
 

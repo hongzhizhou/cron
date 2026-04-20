@@ -320,7 +320,7 @@ func TestStandardSpecSchedule(t *testing.T) {
 	}{
 		{
 			expr:     "5 * * * *",
-			expected: &SpecSchedule{1 << seconds.min, 1 << 5, all(hours), all(dom), all(months), all(dow), time.Local},
+			expected: &SpecSchedule{1 << seconds.min, 1 << 5, all(hours), all(dom), all(months), all(dow), time.Local, false},
 		},
 		{
 			expr:     "@every 5m",
@@ -359,15 +359,15 @@ func TestNoDescriptorParser(t *testing.T) {
 }
 
 func every5min(loc *time.Location) *SpecSchedule {
-	return &SpecSchedule{1 << 0, 1 << 5, all(hours), all(dom), all(months), all(dow), loc}
+	return &SpecSchedule{1 << 0, 1 << 5, all(hours), all(dom), all(months), all(dow), loc, false}
 }
 
 func every5min5s(loc *time.Location) *SpecSchedule {
-	return &SpecSchedule{1 << 5, 1 << 5, all(hours), all(dom), all(months), all(dow), loc}
+	return &SpecSchedule{1 << 5, 1 << 5, all(hours), all(dom), all(months), all(dow), loc, false}
 }
 
 func midnight(loc *time.Location) *SpecSchedule {
-	return &SpecSchedule{1, 1, 1, all(dom), all(months), all(dow), loc}
+	return &SpecSchedule{1, 1, 1, all(dom), all(months), all(dow), loc, false}
 }
 
 func annual(loc *time.Location) *SpecSchedule {
@@ -379,5 +379,74 @@ func annual(loc *time.Location) *SpecSchedule {
 		Month:    1 << months.min,
 		Dow:      all(dow),
 		Location: loc,
+	}
+}
+
+func TestLastDayOfMonth(t *testing.T) {
+	parser := NewParser(Minute | Hour | Dom | Month | Dow)
+
+	tests := []struct {
+		expr     string
+		expected bool
+	}{
+		{"0 0 L * *", true},
+		{"0 0 15 * *", false},
+		{"0 0 * * *", false},
+	}
+
+	for _, tc := range tests {
+		sched, err := parser.Parse(tc.expr)
+		if err != nil {
+			t.Errorf("%s => unexpected error: %v", tc.expr, err)
+			continue
+		}
+		specSched, ok := sched.(*SpecSchedule)
+		if !ok {
+			t.Errorf("%s => expected *SpecSchedule, got %T", tc.expr, sched)
+			continue
+		}
+		if specSched.LastDayOfMonth != tc.expected {
+			t.Errorf("%s => expected LastDayOfMonth=%v, got %v", tc.expr, tc.expected, specSched.LastDayOfMonth)
+		}
+	}
+}
+
+func TestLastDayOfMonthNext(t *testing.T) {
+	parser := NewParser(Second | Minute | Hour | Dom | Month | Dow)
+	sched, err := parser.Parse("0 0 0 L * *")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tests := []struct {
+		time     string
+		expected string
+	}{
+		// From Jan 15, next last day is Jan 31
+		{"2024-01-15T12:00:00", "2024-01-31T00:00:00"},
+		// From Jan 31, next last day is Feb 29 (2024 is leap year)
+		{"2024-01-31T00:00:00", "2024-02-29T00:00:00"},
+		// From Feb 29, next last day is Mar 31
+		{"2024-02-29T00:00:00", "2024-03-31T00:00:00"},
+		// From Mar 31, next last day is Apr 30
+		{"2024-03-31T00:00:00", "2024-04-30T00:00:00"},
+		// From Apr 30, next last day is May 31
+		{"2024-04-30T00:00:00", "2024-05-31T00:00:00"},
+		// From Dec 31, next last day is Jan 31 of next year
+		{"2024-12-31T00:00:00", "2025-01-31T00:00:00"},
+		// Non-leap year: Feb 28
+		{"2025-01-31T00:00:00", "2025-02-28T00:00:00"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.time, func(t *testing.T) {
+			inputTime, _ := time.Parse("2006-01-02T15:04:05", tc.time)
+			expectedTime, _ := time.Parse("2006-01-02T15:04:05", tc.expected)
+
+			next := sched.Next(inputTime)
+			if !next.Equal(expectedTime) {
+				t.Errorf("Next(%s) = %s, expected %s", tc.time, next.Format("2006-01-02T15:04:05"), tc.expected)
+			}
+		})
 	}
 }

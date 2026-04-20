@@ -9,6 +9,9 @@ type SpecSchedule struct {
 
 	// Override location for this schedule.
 	Location *time.Location
+
+	// LastDayOfMonth is true if the schedule uses 'L' for day of month (last day)
+	LastDayOfMonth bool
 }
 
 // bounds provides a range of acceptable values (plus a map of name to value).
@@ -177,12 +180,23 @@ WRAP:
 // dayMatches returns true if the schedule's day-of-week and day-of-month
 // restrictions are satisfied by the given time.
 func dayMatches(s *SpecSchedule, t time.Time) bool {
-	var (
-		domMatch bool = 1<<uint(t.Day())&s.Dom > 0
-		dowMatch bool = 1<<uint(t.Weekday())&s.Dow > 0
-	)
+	var domMatch bool
+	if s.LastDayOfMonth {
+		domMatch = isLastDayOfMonth(t)
+	} else {
+		domMatch = 1<<uint(t.Day())&s.Dom > 0
+	}
+	dowMatch := 1<<uint(t.Weekday())&s.Dow > 0
+
 	if s.Dom&starBit > 0 || s.Dow&starBit > 0 {
 		return domMatch && dowMatch
 	}
 	return domMatch || dowMatch
+}
+
+// isLastDayOfMonth returns true if the given time is the last day of its month.
+func isLastDayOfMonth(t time.Time) bool {
+	// Get the last day of the month
+	lastDay := time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, t.Location())
+	return t.Day() == lastDay.Day()
 }
